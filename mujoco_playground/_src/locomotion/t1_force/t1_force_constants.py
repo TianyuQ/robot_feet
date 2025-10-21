@@ -12,21 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Constants for T1."""
+"""Constants for T1_Force robot with force sensors."""
 
 from etils import epath
 
 from mujoco_playground._src import mjx_env
 
-ROOT_PATH = mjx_env.ROOT_PATH / "locomotion" / "t1"
+ROOT_PATH = mjx_env.ROOT_PATH / "locomotion" / "t1_force"
 FEET_ONLY_FLAT_TERRAIN_XML = (
     ROOT_PATH / "xmls" / "scene_mjx_feetonly_flat_terrain.xml"
 )
 FEET_ONLY_ROUGH_TERRAIN_XML = (
     ROOT_PATH / "xmls" / "scene_mjx_feetonly_rough_terrain.xml"
-)
-FEET_ONLY_FLAT_TERRAIN_NO_FORCE_XML = (
-    ROOT_PATH / "xmls" / "scene_mjx_feetonly_flat_terrain_no_force.xml"
 )
 
 
@@ -34,7 +31,6 @@ def task_to_xml(task_name: str) -> epath.Path:
   return {
       "flat_terrain": FEET_ONLY_FLAT_TERRAIN_XML,
       "rough_terrain": FEET_ONLY_ROUGH_TERRAIN_XML,
-      "flat_terrain_no_force": FEET_ONLY_FLAT_TERRAIN_NO_FORCE_XML,
   }[task_name]
 
 
@@ -61,6 +57,6 @@ LOCAL_LINVEL_SENSOR = "local_linvel"
 ACCELEROMETER_SENSOR = "accelerometer"
 GYRO_SENSOR = "gyro"
 
-# Force sensors
+# Force sensors - T1_Force has force sensors
 LEFT_FOOT_FORCE_SENSOR = "left_foot_force"
 RIGHT_FOOT_FORCE_SENSOR = "right_foot_force"

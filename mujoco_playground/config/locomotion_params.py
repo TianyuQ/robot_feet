@@ -122,6 +122,8 @@ def brax_ppo_config(
   elif env_name in (
       "T1JoystickFlatTerrain",
       "T1JoystickRoughTerrain",
+      "T1ForceJoystickFlatTerrain",
+      "T1ForceJoystickRoughTerrain",
   ):
     rl_config.num_timesteps = 200_000_000
     rl_config.num_evals = 20

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Joystick task for Booster T1."""
+"""Joystick task for T1_Force robot with force sensors."""
 
 from typing import Any, Dict, Optional, Union
 
@@ -25,8 +25,8 @@ import numpy as np
 
 from mujoco_playground._src import gait
 from mujoco_playground._src import mjx_env
-from mujoco_playground._src.locomotion.t1 import base as t1_base
-from mujoco_playground._src.locomotion.t1 import t1_constants as consts
+from mujoco_playground._src.locomotion.t1_force import base as t1_force_base
+from mujoco_playground._src.locomotion.t1_force import t1_force_constants as consts
 
 
 def default_config() -> config_dict.ConfigDict:
@@ -81,6 +81,9 @@ def default_config() -> config_dict.ConfigDict:
               pose=-1.0,
               feet_distance=-1.0,
               collision=-1.0,
+              # Force sensor related rewards.
+              force_sensor_balance=0.1,
+              force_sensor_stability=0.05,
           ),
           tracking_sigma=0.25,
           max_foot_height=0.12,
@@ -100,8 +103,8 @@ def default_config() -> config_dict.ConfigDict:
   )
 
 
-class Joystick(t1_base.T1Env):
-  """Track a joystick command."""
+class Joystick(t1_force_base.T1ForceEnv):
+  """Track a joystick command with force sensors."""
 
   def __init__(
       self,
@@ -458,6 +461,16 @@ class Joystick(t1_base.T1Env):
         * self._config.noise_config.scales.linvel
     )
 
+    # Include force sensor data in observations
+    feet_forces = self.get_feet_forces(data)  # 6 (3 per foot)
+    info["rng"], noise_rng = jax.random.split(info["rng"])
+    noisy_feet_forces = (
+        feet_forces
+        + (2 * jax.random.uniform(noise_rng, shape=feet_forces.shape) - 1)
+        * self._config.noise_config.level
+        * 0.1  # Force sensor noise scale
+    )
+
     state = jp.hstack([
         noisy_linvel,  # 3
         noisy_gyro,  # 3
@@ -467,14 +480,13 @@ class Joystick(t1_base.T1Env):
         noisy_joint_vel,
         info["last_act"],
         phase,
+        noisy_feet_forces,  # 6 - Force sensor data
     ])
 
     accelerometer = self.get_accelerometer(data)
     global_angvel = self.get_global_angvel(data)
     feet_vel = data.sensordata[self._foot_linvel_sensor_adr].ravel()
     root_height = data.qpos[2]
-    
-    # T1 robot does not have force sensors
 
     privileged_state = jp.hstack([
         state,
@@ -490,7 +502,7 @@ class Joystick(t1_base.T1Env):
         contact,  # 2
         feet_vel,  # 4*3
         info["feet_air_time"],  # 2
-        # No force sensor data
+        feet_forces,  # 6 - Clean force sensor data
     ])
 
     return {
@@ -558,6 +570,9 @@ class Joystick(t1_base.T1Env):
         "dof_pos_limits": self._cost_joint_pos_limits(data.qpos[7:]),
         "pose": self._cost_pose(data.qpos[7:]),
         "feet_distance": self._cost_feet_distance(data, info),
+        # Force sensor related rewards.
+        "force_sensor_balance": self._reward_force_sensor_balance(data),
+        "force_sensor_stability": self._reward_force_sensor_stability(data),
     }
 
   # Tracking rewards.
@@ -732,9 +747,6 @@ class Joystick(t1_base.T1Env):
     rz = gait.get_rz(phase, swing_height=foot_height)
     error = jp.sum(jp.square(foot_z - rz))
     reward = jp.exp(-error / 0.01)
-    # TODO(kevin): Ensure no movement at 0 command.
-    # cmd_norm = jp.linalg.norm(commands)
-    # reward *= cmd_norm > 0.1  # No reward for zero commands.
     return reward
 
   def _cost_feet_distance(
@@ -750,6 +762,32 @@ class Joystick(t1_base.T1Env):
         - jp.sin(base_yaw) * (left_foot_pos[0] - right_foot_pos[0])
     )
     return jp.clip(0.2 - feet_distance, min=0.0, max=0.1)
+
+  # Force sensor related rewards.
+
+  def _reward_force_sensor_balance(self, data: mjx.Data) -> jax.Array:
+    """Reward for balanced force distribution between feet."""
+    feet_forces = self.get_feet_forces(data)
+    left_force_z = feet_forces[2]  # Z component of left foot force
+    right_force_z = feet_forces[5]  # Z component of right foot force
+    
+    # Reward for balanced vertical forces
+    force_balance = jp.abs(left_force_z - right_force_z)
+    return jp.exp(-force_balance / 10.0)  # Normalize by expected force range
+
+  def _reward_force_sensor_stability(self, data: mjx.Data) -> jax.Array:
+    """Reward for stable force patterns (smooth transitions)."""
+    feet_forces = self.get_feet_forces(data)
+    
+    # Reward for having reasonable vertical forces (not too high or too low)
+    left_force_z = feet_forces[2]
+    right_force_z = feet_forces[5]
+    
+    # Target force around 200-400N per foot (robot weight ~40kg)
+    target_force = 300.0
+    force_error = jp.square(left_force_z - target_force) + jp.square(right_force_z - target_force)
+    
+    return jp.exp(-force_error / 10000.0)  # Normalize by force variance
 
   def sample_command(self, rng: jax.Array) -> jax.Array:
     rng1, rng2, rng3, rng4 = jax.random.split(rng, 4)

@@ -308,9 +308,7 @@
     <framelinvel objtype="site" objname="right_foot" name="right_foot_global_linvel"/>
     <framepos objtype="site" objname="left_foot" name="left_foot_pos"/>
     <framepos objtype="site" objname="right_foot" name="right_foot_pos"/>
-    <!-- Force sensors for feet -->
-    <force name="left_foot_force" site="left_foot"/>
-    <force name="right_foot_force" site="right_foot"/>
+    <!-- No force sensors for regular T1 -->
   </sensor>
 
   <actuator>

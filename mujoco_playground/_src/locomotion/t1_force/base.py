@@ -12,22 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Base classes for T1."""
+"""Base class for T1_Force environments with force sensors."""
 
 from typing import Any, Dict, Optional, Union
 
-from etils import epath
 import jax
 import jax.numpy as jp
 from ml_collections import config_dict
-import mujoco
 from mujoco import mjx
+import mujoco
+from etils import epath
 
 from mujoco_playground._src import mjx_env
-from mujoco_playground._src.locomotion.t1 import t1_constants as consts
+from mujoco_playground._src.locomotion.t1_force import t1_force_constants as consts
 
 
 def get_assets() -> Dict[str, bytes]:
+  """Get the assets for the T1_Force robot."""
   assets = {}
   mjx_env.update_assets(assets, consts.ROOT_PATH / "xmls", "*.xml")
   mjx_env.update_assets(assets, consts.ROOT_PATH / "xmls" / "assets")
@@ -37,8 +38,8 @@ def get_assets() -> Dict[str, bytes]:
   return assets
 
 
-class T1Env(mjx_env.MjxEnv):
-  """Base class for T1 environments."""
+class T1ForceEnv(mjx_env.MjxEnv):
+  """Base class for T1_Force environments with force sensors."""
 
   def __init__(
       self,
@@ -96,7 +97,25 @@ class T1Env(mjx_env.MjxEnv):
     """Return the gyroscope readings in the local frame."""
     return mjx_env.get_sensor_data(self.mj_model, data, f"{consts.GYRO_SENSOR}")
 
-  # T1 robot does not have force sensors
+  # Force sensor readings - T1_Force has force sensors
+
+  def get_left_foot_force(self, data: mjx.Data) -> jax.Array:
+    """Return the force readings at the left foot."""
+    return mjx_env.get_sensor_data(
+        self.mj_model, data, f"{consts.LEFT_FOOT_FORCE_SENSOR}"
+    )
+
+  def get_right_foot_force(self, data: mjx.Data) -> jax.Array:
+    """Return the force readings at the right foot."""
+    return mjx_env.get_sensor_data(
+        self.mj_model, data, f"{consts.RIGHT_FOOT_FORCE_SENSOR}"
+    )
+
+  def get_feet_forces(self, data: mjx.Data) -> jax.Array:
+    """Return the force readings for both feet as a stacked array."""
+    left_force = self.get_left_foot_force(data)
+    right_force = self.get_right_foot_force(data)
+    return jp.hstack([left_force, right_force])
 
   # Accessors.
 
