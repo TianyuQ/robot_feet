@@ -123,6 +123,7 @@ def brax_ppo_config(
       "T1JoystickFlatTerrain",
       "T1JoystickRoughTerrain",
       "T1ForceJoystickFlatTerrain",
+      "T1ForceJoystickFlatTerrainForceRewardOnly",
       "T1ForceJoystickRoughTerrain",
   ):
     rl_config.num_timesteps = 200_000_000

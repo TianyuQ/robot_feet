@@ -64,23 +64,86 @@ def print_section(title: str, width: int = 50) -> None:
 
 
 def load_trained_model(model_path: str) -> Tuple[callable, Dict, Dict]:
-    """Load a trained model from file."""
-    import pickle
+    """Load params and reconstruct make_inference_fn from config/env."""
+    # Use cloudpickle to support serializing local/closure functions
+    try:
+        import cloudpickle as pickle  # type: ignore
+    except Exception:
+        import pickle  # fallback
+    import os
     
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
+    # Guard against empty or truncated files
+    try:
+        size_bytes = os.path.getsize(model_path)
+    except OSError:
+        size_bytes = -1
+    if size_bytes <= 0:
+        raise RuntimeError(
+            f"Model file exists but is empty or unreadable: {model_path}. "
+            f"Please retrain to produce a valid checkpoint."
+        )
     
-    with open(model_path, 'rb') as f:
-        model_data = pickle.load(f)
+    try:
+        with open(model_path, 'rb') as f:
+            model_data = pickle.load(f)
+    except EOFError as e:
+        raise RuntimeError(
+            f"Failed to load model (EOFError). The file may be truncated: {model_path}. "
+            f"Size: {size_bytes} bytes. Retrain to regenerate the file."
+        ) from e
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to unpickle model file: {model_path}. The file may be corrupted or incompatible ({e})."
+        ) from e
     
     print(f"Loaded trained model from: {model_path}")
-    print(f"Environment: {model_data['env_name']}")
-    print(f"Final reward: {model_data['metrics'].get('eval/episode_reward', 'N/A')}")
-    
-    return model_data['make_inference_fn'], model_data['params'], model_data['metrics']
+    env_name = model_data.get('env_name', 'T1JoystickFlatTerrain')
+    metrics = model_data.get('metrics', {})
+    params = model_data['params']
+    saved_policy_vars = model_data.get('policy_vars')
+
+    # Rebuild network factory from canonical config
+    ppo_params = locomotion_params.brax_ppo_config(env_name)
+    ppo_training_params = dict(ppo_params)
+    network_factory = ppo_networks.make_ppo_networks
+    if "network_factory" in ppo_params:
+        del ppo_training_params["network_factory"]
+        network_factory = functools.partial(
+            ppo_networks.make_ppo_networks,
+            **ppo_params.network_factory
+        )
+
+    # Build networks with env sizes to create an equivalent inference fn
+    env = registry.load(env_name)
+    networks = network_factory(env.observation_size, env.action_size)
+
+    def _policy_variables_from_params(all_params):
+        if isinstance(all_params, dict):
+            if 'params' in all_params and isinstance(all_params['params'], dict):
+                if 'policy' in all_params['params']:
+                    return {'params': all_params['params']['policy']}
+            if 'policy' in all_params:
+                policy_tree = all_params['policy']
+                if isinstance(policy_tree, dict) and 'params' in policy_tree:
+                    return policy_tree
+                return {'params': policy_tree}
+        return {'params': all_params}
+
+    def make_inference_fn_reconstructed(prms, deterministic=True):
+        def policy(obs, rng):
+            policy_vars = saved_policy_vars if saved_policy_vars is not None else _policy_variables_from_params(prms)
+            act, _ = networks.policy_network.apply(policy_vars, obs)
+            return act, None
+        return policy
+
+    print(f"Environment: {env_name}")
+    print(f"Final reward: {metrics.get('eval/episode_reward', 'N/A')}")
+    return make_inference_fn_reconstructed, params, metrics
 
 
-def setup_training(env_name: str, logdir: str = 'tensorboard_logs', enable_tensorboard: bool = True) -> Tuple[Dict, callable, SummaryWriter]:
+def setup_training(env_name: str, logdir: str = 'tensorboard_logs', enable_tensorboard: bool = True) -> Tuple[Dict, callable, SummaryWriter, str, str, str]:
     """Setup training configuration and function."""
     print_section("Training Configuration")
     
@@ -99,14 +162,21 @@ def setup_training(env_name: str, logdir: str = 'tensorboard_logs', enable_tenso
     
     # Setup TensorBoard logging
     writer = None
+    time_tag = datetime.now().strftime('%Y%m%d_%H%M%S')
     if enable_tensorboard:
-        log_dir = f"{logdir}/t1_joystick"
-        os.makedirs(log_dir, exist_ok=True)
-        writer = SummaryWriter(log_dir)
-        print(f"\nTensorBoard logging enabled. Logs saved to: {log_dir}")
-        print(f"To view training progress, run: tensorboard --logdir {logdir}")
+        writer = None
     else:
         print("\nTensorBoard logging disabled.")
+    # Checkpoint directory under logs (match trainer style)
+    exp_root = os.path.abspath(os.path.join("logs", f"{env_name}-{time_tag}"))
+    ckpt_path = os.path.join(exp_root, "checkpoints")
+    os.makedirs(ckpt_path, exist_ok=True)
+    print(f"Checkpoint path: {ckpt_path}")
+    if enable_tensorboard:
+        os.makedirs(exp_root, exist_ok=True)
+        writer = SummaryWriter(exp_root)
+        print(f"\nTensorBoard logging enabled. Logs saved to: {exp_root}")
+        print(f"To view training progress, run: tensorboard --logdir logs")
     
     # Setup training progress tracking
     x_data, y_data, y_dataerr = [], [], []
@@ -172,13 +242,14 @@ def setup_training(env_name: str, logdir: str = 'tensorboard_logs', enable_tenso
         ppo.train, **dict(ppo_training_params),
         network_factory=network_factory,
         randomization_fn=randomizer,
-        progress_fn=progress
+        progress_fn=progress,
+        save_checkpoint_path=ckpt_path,
     )
     
-    return ppo_params, train_fn, writer
+    return ppo_params, train_fn, writer, time_tag, ckpt_path, exp_root
 
 
-def train_policy(env, env_cfg, train_fn, writer=None) -> Tuple[callable, Dict, Dict]:
+def train_policy(env, env_cfg, train_fn, writer=None, time_tag: str = None, ckpt_path: str = None) -> Tuple[callable, Dict, Dict]:
     """Train the T1 policy without force sensors."""
     print_section("Training the Policy")
     
@@ -200,24 +271,11 @@ def train_policy(env, env_cfg, train_fn, writer=None) -> Tuple[callable, Dict, D
         writer.add_scalar("Training/Total_Time", end_time - start_time, 0)
         writer.close()
     
-    # Save trained model
-    model_save_dir = "trained_models/t1_joystick"
-    os.makedirs(model_save_dir, exist_ok=True)
-    
-    import pickle
-    model_path = os.path.join(model_save_dir, "trained_model.pkl")
-    with open(model_path, 'wb') as f:
-        pickle.dump({
-            'make_inference_fn': make_inference_fn,
-            'params': params,
-            'metrics': metrics,
-            'env_name': 'T1JoystickFlatTerrain'
-        }, f)
-    
     print(f"\nTraining completed!")
     print(f"Training time: {end_time - start_time:.2f} seconds")
     print(f"Final reward: {metrics.get('eval/episode_reward', 'N/A')}")
-    print(f"Trained model saved to: {model_path}")
+    if ckpt_path:
+        print(f"Checkpoints saved under: {ckpt_path}")
     
     return make_inference_fn, params, metrics
 
@@ -340,7 +398,7 @@ def evaluate_policy(env, env_cfg, make_inference_fn, params,
     }
 
 
-def plot_trajectory_analysis(rollout: List, eval_data: Dict, dt: float) -> None:
+def plot_trajectory_analysis(rollout: List, eval_data: Dict, dt: float, output_dir: str = ".") -> None:
     """Plot trajectory analysis for the robot following the locomotion notebook pattern."""
     print_section("Trajectory Analysis")
     
@@ -363,6 +421,10 @@ def plot_trajectory_analysis(rollout: List, eval_data: Dict, dt: float) -> None:
             else:
                 ax.set_visible(False)
         plt.tight_layout()
+        # Save swing peak figure
+        os.makedirs(output_dir, exist_ok=True)
+        fig_path = os.path.join(output_dir, f"swing_peaks_{int(time.time())}.png")
+        fig.savefig(fig_path, dpi=150)
         plt.show()
 
     linvel_x = linvel[:, 0]
@@ -396,6 +458,10 @@ def plot_trajectory_analysis(rollout: List, eval_data: Dict, dt: float) -> None:
         ax.set_ylabel(labels[i])
     
     plt.tight_layout()
+    # Save velocity tracking figure
+    os.makedirs(output_dir, exist_ok=True)
+    fig_path2 = os.path.join(output_dir, f"velocity_tracking_{int(time.time())}.png")
+    fig.savefig(fig_path2, dpi=150)
     plt.show()
 
     # Print trajectory statistics
@@ -411,7 +477,7 @@ def plot_trajectory_analysis(rollout: List, eval_data: Dict, dt: float) -> None:
         print(f"Total reward: {np.sum(rewards):.3f}")
 
 
-def render_policy(rollout: List, eval_data: Dict, eval_env) -> None:
+def render_policy(rollout: List, eval_data: Dict, eval_env, output_dir: str = ".") -> None:
     """Render the policy following the locomotion notebook pattern."""
     print_section("Policy Rendering")
     
@@ -440,7 +506,8 @@ def render_policy(rollout: List, eval_data: Dict, eval_env) -> None:
     
     # Save video instead of showing it (since we're in a script, not notebook)
     import mediapy as media
-    output_path = f"t1_policy_render_{int(time.time())}.mp4"
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, f"t1_policy_render_{int(time.time())}.mp4")
     media.write_video(output_path, frames, fps=fps)
     print(f"Video saved to: {output_path}")
 
@@ -522,7 +589,8 @@ def main():
     parser.add_argument('--yaw-vel', type=float, default=3.14, help='Yaw velocity command')
     parser.add_argument('--logdir', type=str, default='tensorboard_logs', help='TensorBoard log directory')
     parser.add_argument('--no-tensorboard', action='store_true', help='Disable TensorBoard logging')
-    parser.add_argument('--load-model', type=str, help='Path to trained model to load for evaluation')
+    parser.add_argument('--load-model', type=str, help='[Deprecated] Path to .pkl model (use --load-checkpoint-path)')
+    parser.add_argument('--load-checkpoint-path', type=str, help='Path to Brax checkpoint directory (logs/.../checkpoints)')
     
     args = parser.parse_args()
     
@@ -560,15 +628,44 @@ def main():
         except FileNotFoundError as e:
             print(f"Error loading model: {e}")
             return
+    elif args.load_checkpoint_path:
+        try:
+            ppo_params = locomotion_params.brax_ppo_config(env_name)
+            ppo_training_params = dict(ppo_params)
+            if 'network_factory' in ppo_training_params:
+                del ppo_training_params['network_factory']
+            network_factory = ppo_networks.make_ppo_networks
+            if hasattr(ppo_params, 'network_factory'):
+                network_factory = functools.partial(
+                    ppo_networks.make_ppo_networks,
+                    **ppo_params.network_factory
+                )
+            randomizer = registry.get_domain_randomizer(env_name)
+            ppo_training_params['num_timesteps'] = 0
+            restore_train = functools.partial(
+                ppo.train, **dict(ppo_training_params),
+                network_factory=network_factory,
+                randomization_fn=randomizer,
+                restore_checkpoint_path=os.path.abspath(args.load_checkpoint_path),
+                wrap_env_fn=wrapper.wrap_for_brax_training,
+            )
+            make_inference_fn, params, metrics = restore_train(
+                environment=env,
+                eval_env=registry.load('T1JoystickFlatTerrain', config=env_cfg),
+            )
+            print("Successfully restored from checkpoint!")
+        except Exception as e:
+            print(f"Error restoring checkpoint: {e}")
+            return
     
     # Training
     if args.train:
-        ppo_params, train_fn, writer = setup_training(
+        ppo_params, train_fn, writer, time_tag, ckpt_path, exp_root = setup_training(
             env_name, 
             logdir=args.logdir, 
             enable_tensorboard=not args.no_tensorboard
         )
-        make_inference_fn, params, metrics = train_policy(env, env_cfg, train_fn, writer)
+        make_inference_fn, params, metrics = train_policy(env, env_cfg, train_fn, writer, time_tag, ckpt_path)
     
     # Evaluation
     if args.eval and make_inference_fn is not None:
@@ -577,11 +674,21 @@ def main():
             args.x_vel, args.y_vel, args.yaw_vel
         )
         
+        # Determine unified output dir
+        output_dir = None
+        if args.load_checkpoint_path:
+            abs_path = os.path.abspath(args.load_checkpoint_path)
+            checkpoints_dir = os.path.dirname(abs_path)
+            exp_root = os.path.dirname(checkpoints_dir)
+            output_dir = exp_root
+        else:
+            output_dir = os.getcwd()
+
         if args.plot:
-            plot_trajectory_analysis(rollout, eval_data, env.dt)
+            plot_trajectory_analysis(rollout, eval_data, env.dt, output_dir)
             # Also render the policy
             eval_env = registry.load('T1JoystickFlatTerrain', config=env_cfg)
-            render_policy(rollout, eval_data, eval_env)
+            render_policy(rollout, eval_data, eval_env, output_dir)
     
     # Interactive testing
     if args.interactive and make_inference_fn is not None:

@@ -68,8 +68,8 @@ def default_config() -> config_dict.ConfigDict:
               feet_clearance=0.0,
               feet_air_time=2.0,
               feet_slip=-0.25,
-              feet_height=0.0,
-              feet_phase=1.0,
+              feet_height=0.0,  # Penalize high foot lifts (was 0.0)
+              feet_phase=1.0,  # Reduce phase tracking reward to allow lower feet (was 1.0)
               # Other rewards.
               stand_still=0.0,
               alive=0.25,
@@ -82,11 +82,12 @@ def default_config() -> config_dict.ConfigDict:
               feet_distance=-1.0,
               collision=-1.0,
               # Force sensor related rewards.
-              force_sensor_balance=0.1,
-              force_sensor_stability=0.05,
+              force_sensor_balance=0.0,  # Disabled (kept for compatibility)
+              force_sensor_stability=0.0,  # Disabled (kept for compatibility)
+              force_impulse_penalty=-0.1,  # Penalize large force values/impulses
           ),
           tracking_sigma=0.25,
-          max_foot_height=0.12,
+          max_foot_height=0.08,  # Reduced from 0.12 to encourage lower foot height
           base_height_target=0.665,
       ),
       push_config=config_dict.create(
@@ -97,10 +98,17 @@ def default_config() -> config_dict.ConfigDict:
       lin_vel_x=[-1.0, 1.0],
       lin_vel_y=[-0.8, 0.8],
       ang_vel_yaw=[-1.0, 1.0],
+      observe_force_sensors=True,
       impl="jax",
       nconmax=8 * 8192,
       njmax=80,
   )
+
+def force_reward_only_config() -> config_dict.ConfigDict:
+  """Config where force sensors affect rewards but not observations."""
+  cfg = default_config()
+  cfg.observe_force_sensors = False
+  return cfg
 
 
 class Joystick(t1_force_base.T1ForceEnv):
@@ -461,7 +469,7 @@ class Joystick(t1_force_base.T1ForceEnv):
         * self._config.noise_config.scales.linvel
     )
 
-    # Include force sensor data in observations
+    # Force sensors are optional in observation vectors.
     feet_forces = self.get_feet_forces(data)  # 6 (3 per foot)
     info["rng"], noise_rng = jax.random.split(info["rng"])
     noisy_feet_forces = (
@@ -471,7 +479,7 @@ class Joystick(t1_force_base.T1ForceEnv):
         * 0.1  # Force sensor noise scale
     )
 
-    state = jp.hstack([
+    state_components = [
         noisy_linvel,  # 3
         noisy_gyro,  # 3
         noisy_gravity,  # 3
@@ -480,15 +488,17 @@ class Joystick(t1_force_base.T1ForceEnv):
         noisy_joint_vel,
         info["last_act"],
         phase,
-        noisy_feet_forces,  # 6 - Force sensor data
-    ])
+    ]
+    if self._config.observe_force_sensors:
+      state_components.append(noisy_feet_forces)  # 6 - Force sensor data
+    state = jp.hstack(state_components)
 
     accelerometer = self.get_accelerometer(data)
     global_angvel = self.get_global_angvel(data)
     feet_vel = data.sensordata[self._foot_linvel_sensor_adr].ravel()
     root_height = data.qpos[2]
 
-    privileged_state = jp.hstack([
+    privileged_state_components = [
         state,
         gyro,  # 3
         accelerometer,  # 3
@@ -502,8 +512,10 @@ class Joystick(t1_force_base.T1ForceEnv):
         contact,  # 2
         feet_vel,  # 4*3
         info["feet_air_time"],  # 2
-        feet_forces,  # 6 - Clean force sensor data
-    ])
+    ]
+    if self._config.observe_force_sensors:
+      privileged_state_components.append(feet_forces)  # 6 - Clean force data
+    privileged_state = jp.hstack(privileged_state_components)
 
     return {
         "state": state,
@@ -573,6 +585,7 @@ class Joystick(t1_force_base.T1ForceEnv):
         # Force sensor related rewards.
         "force_sensor_balance": self._reward_force_sensor_balance(data),
         "force_sensor_stability": self._reward_force_sensor_stability(data),
+        "force_impulse_penalty": self._cost_force_impulse_penalty(data),
     }
 
   # Tracking rewards.
@@ -788,6 +801,25 @@ class Joystick(t1_force_base.T1ForceEnv):
     force_error = jp.square(left_force_z - target_force) + jp.square(right_force_z - target_force)
     
     return jp.exp(-force_error / 10000.0)  # Normalize by force variance
+
+  def _cost_force_impulse_penalty(self, data: mjx.Data) -> jax.Array:
+    """Penalize force magnitudes from force sensors."""
+    feet_forces = self.get_feet_forces(data)
+    
+    # Get force magnitudes for both feet (L2 norm of 3D force vector)
+    left_force_z = feet_forces[2]  # [Fx, Fy, Fz] for left foot
+    right_force_z = feet_forces[5]  # [Fx, Fy, Fz] for right foot
+    
+    # Compute force magnitude (L2 norm)
+    # left_force_z = left_force_z
+    # right_force_z = right_force_z
+    
+    # Penalize force magnitudes with squared penalty
+    # This discourages large forces proportionally to their magnitude
+    penalty = jp.mean(jp.array([left_force_z, right_force_z]))
+    
+    # Normalize by 1e6 (1000N^2) for reasonable scaling
+    return penalty / 1e3
 
   def sample_command(self, rng: jax.Array) -> jax.Array:
     rng1, rng2, rng3, rng4 = jax.random.split(rng, 4)
