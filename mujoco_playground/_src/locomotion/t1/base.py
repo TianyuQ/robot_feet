@@ -18,7 +18,6 @@ from typing import Any, Dict, Optional, Union
 
 from etils import epath
 import jax
-import jax.numpy as jp
 from ml_collections import config_dict
 import mujoco
 from mujoco import mjx

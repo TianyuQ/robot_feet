@@ -488,7 +488,6 @@ class Joystick(t1_base.T1Env):
         contact,  # 2
         feet_vel,  # 4*3
         info["feet_air_time"],  # 2
-        # No force sensor data
     ])
 
     return {
