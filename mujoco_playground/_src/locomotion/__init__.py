@@ -80,7 +80,7 @@ _envs = {
         spot_joystick_gait_tracking.JoystickGaitTracking
     ),
     "T1JoystickFlatTerrain": functools.partial(
-        physio_joystick.Joystick, task="flat_terrain_no_force"
+        physio_joystick.Joystick, task="flat_terrain"
     ),
     "T1JoystickRoughTerrain": functools.partial(
         physio_joystick.Joystick, task="rough_terrain"
