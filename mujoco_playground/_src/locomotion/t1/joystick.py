@@ -473,8 +473,6 @@ class Joystick(t1_base.T1Env):
     global_angvel = self.get_global_angvel(data)
     feet_vel = data.sensordata[self._foot_linvel_sensor_adr].ravel()
     root_height = data.qpos[2]
-    
-    # T1 robot does not have force sensors
 
     privileged_state = jp.hstack([
         state,

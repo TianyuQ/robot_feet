@@ -96,8 +96,6 @@ class T1Env(mjx_env.MjxEnv):
     """Return the gyroscope readings in the local frame."""
     return mjx_env.get_sensor_data(self.mj_model, data, f"{consts.GYRO_SENSOR}")
 
-  # T1 robot does not have force sensors
-
   # Accessors.
 
   @property

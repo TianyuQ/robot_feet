@@ -25,16 +25,11 @@ FEET_ONLY_FLAT_TERRAIN_XML = (
 FEET_ONLY_ROUGH_TERRAIN_XML = (
     ROOT_PATH / "xmls" / "scene_mjx_feetonly_rough_terrain.xml"
 )
-FEET_ONLY_FLAT_TERRAIN_NO_FORCE_XML = (
-    ROOT_PATH / "xmls" / "scene_mjx_feetonly_flat_terrain_no_force.xml"
-)
-
 
 def task_to_xml(task_name: str) -> epath.Path:
   return {
       "flat_terrain": FEET_ONLY_FLAT_TERRAIN_XML,
       "rough_terrain": FEET_ONLY_ROUGH_TERRAIN_XML,
-      "flat_terrain_no_force": FEET_ONLY_FLAT_TERRAIN_NO_FORCE_XML,
   }[task_name]
 
 
@@ -60,7 +55,3 @@ GLOBAL_ANGVEL_SENSOR = "global_angvel"
 LOCAL_LINVEL_SENSOR = "local_linvel"
 ACCELEROMETER_SENSOR = "accelerometer"
 GYRO_SENSOR = "gyro"
-
-# Force sensors
-LEFT_FOOT_FORCE_SENSOR = "left_foot_force"
-RIGHT_FOOT_FORCE_SENSOR = "right_foot_force"
