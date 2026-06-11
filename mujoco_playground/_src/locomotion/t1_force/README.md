@@ -4,8 +4,9 @@
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-git clone <repo>
+git clone https://github.com/TianyuQ/robot_feet.git
 cd robot_feet
+git checkout clean_t1_force
 uv sync --extra learning
 ```
 
