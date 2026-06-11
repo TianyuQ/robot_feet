@@ -46,6 +46,7 @@ def default_config() -> config_dict.ConfigDict:
               gravity=0.05,
               linvel=0.1,
               gyro=0.2,
+              force=0.1,
           ),
       ),
       reward_config=config_dict.create(
@@ -466,7 +467,7 @@ class Joystick(t1_force_base.T1ForceEnv):
         feet_forces
         + (2 * jax.random.uniform(noise_rng, shape=feet_forces.shape) - 1)
         * self._config.noise_config.level
-        * 0.1  # Force sensor noise scale
+        * self._config.noise_config.scales.force
     )
 
     state_components = [
