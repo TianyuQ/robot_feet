@@ -46,7 +46,7 @@ def default_config() -> config_dict.ConfigDict:
               gravity=0.05,
               linvel=0.1,
               gyro=0.2,
-              force=0.1,
+              force=0.0,
           ),
       ),
       reward_config=config_dict.create(
