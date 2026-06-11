@@ -289,6 +289,7 @@ class Joystick(t1_force_base.T1ForceEnv):
     for k in self._config.reward_config.scales.keys():
       metrics[f"reward/{k}"] = jp.zeros(())
     metrics["swing_peak"] = jp.zeros(())
+    metrics["soft_landing_impact"] = jp.zeros(())
 
     left_feet_contact = jp.array([
         data.sensordata[self._mj_model.sensor_adr[sensorid]] > 0
@@ -364,6 +365,7 @@ class Joystick(t1_force_base.T1ForceEnv):
     rewards = self._get_reward(
         data, action, state.info, state.metrics, done, first_contact, contact
     )
+    raw_soft_landing = rewards["soft_landing"]
     rewards = {
         k: v * self._config.reward_config.scales[k] for k, v in rewards.items()
     }
@@ -398,6 +400,7 @@ class Joystick(t1_force_base.T1ForceEnv):
     for k, v in rewards.items():
       state.metrics[f"reward/{k}"] = v
     state.metrics["swing_peak"] = jp.mean(state.info["swing_peak"])
+    state.metrics["soft_landing_impact"] = raw_soft_landing
 
     done = done.astype(reward.dtype)
     state = state.replace(data=data, obs=obs, reward=reward, done=done)
