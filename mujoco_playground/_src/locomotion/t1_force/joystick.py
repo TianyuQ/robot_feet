@@ -71,6 +71,7 @@ def default_config() -> config_dict.ConfigDict:
               feet_slip=-0.25,
               feet_height=0.0,
               feet_phase=1.0,
+              soft_landing=0.0,
               # Other rewards.
               stand_still=0.0,
               alive=0.25,
@@ -554,6 +555,7 @@ class Joystick(t1_force_base.T1ForceEnv):
         "feet_air_time": self._reward_feet_air_time(
             info["feet_air_time"], first_contact, info["command"]
         ),
+        "soft_landing": self._cost_soft_landing(data, first_contact),
         "feet_phase": self._reward_feet_phase(
             data,
             info["phase"],
@@ -717,6 +719,16 @@ class Joystick(t1_force_base.T1ForceEnv):
     del info  # Unused.
     error = swing_peak / self._config.reward_config.max_foot_height - 1.0
     return jp.sum(jp.square(error) * first_contact)
+
+  def _cost_soft_landing(
+      self, data: mjx.Data, first_contact: jax.Array
+  ) -> jax.Array:
+    feet_forces = self.get_feet_forces(data)  # [Fx_l, Fy_l, Fz_l, Fx_r, Fy_r, Fz_r]
+    force_magnitudes = jp.array([
+        jp.linalg.norm(feet_forces[:3]),
+        jp.linalg.norm(feet_forces[3:]),
+    ])
+    return jp.sum(force_magnitudes * first_contact)
 
   def _reward_feet_air_time(
       self,
