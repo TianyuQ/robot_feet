@@ -98,9 +98,16 @@ def default_config() -> config_dict.ConfigDict:
       ang_vel_yaw=[-1.0, 1.0],
       observe_force_sensors=True,
       impl="jax",
-      nconmax=8 * 8192,
+      naconmax=8 * 8192,
       njmax=80,
   )
+
+
+def force_reward_only_config() -> config_dict.ConfigDict:
+  """Config where force sensors affect rewards but not observations."""
+  cfg = default_config()
+  cfg.observe_force_sensors = False
+  return cfg
 
 
 class Joystick(t1_force_base.T1ForceEnv):
@@ -113,7 +120,7 @@ class Joystick(t1_force_base.T1ForceEnv):
       config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None,
   ):
     if task.startswith("rough"):
-      config.nconmax = 100 * 8192
+      config.naconmax = 100 * 8192
       config.njmax = 500
     super().__init__(
         xml_path=consts.task_to_xml(task).as_posix(),
@@ -241,7 +248,7 @@ class Joystick(t1_force_base.T1ForceEnv):
         qvel=qvel,
         ctrl=qpos[7:],
         impl=self.mjx_model.impl.value,
-        nconmax=self._config.nconmax,
+        naconmax=self._config.naconmax,
         njmax=self._config.njmax,
     )
     data = mjx.forward(self.mjx_model, data)
