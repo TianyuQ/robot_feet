@@ -68,8 +68,8 @@ def default_config() -> config_dict.ConfigDict:
               feet_clearance=0.0,
               feet_air_time=2.0,
               feet_slip=-0.25,
-              feet_height=0.0,  # Penalize high foot lifts (was 0.0)
-              feet_phase=1.0,  # Reduce phase tracking reward to allow lower feet (was 1.0)
+              feet_height=0.0,
+              feet_phase=1.0,
               # Other rewards.
               stand_still=0.0,
               alive=0.25,
@@ -81,13 +81,9 @@ def default_config() -> config_dict.ConfigDict:
               pose=-1.0,
               feet_distance=-1.0,
               collision=-1.0,
-              # Force sensor related rewards.
-              force_sensor_balance=0.0,  # Disabled (kept for compatibility)
-              force_sensor_stability=0.0,  # Disabled (kept for compatibility)
-              force_impulse_penalty=-0.1,  # Penalize large force values/impulses
           ),
           tracking_sigma=0.25,
-          max_foot_height=0.08,  # Reduced from 0.12 to encourage lower foot height
+          max_foot_height=0.12,
           base_height_target=0.665,
       ),
       push_config=config_dict.create(
@@ -103,12 +99,6 @@ def default_config() -> config_dict.ConfigDict:
       nconmax=8 * 8192,
       njmax=80,
   )
-
-def force_reward_only_config() -> config_dict.ConfigDict:
-  """Config where force sensors affect rewards but not observations."""
-  cfg = default_config()
-  cfg.observe_force_sensors = False
-  return cfg
 
 
 class Joystick(t1_force_base.T1ForceEnv):
@@ -582,10 +572,6 @@ class Joystick(t1_force_base.T1ForceEnv):
         "dof_pos_limits": self._cost_joint_pos_limits(data.qpos[7:]),
         "pose": self._cost_pose(data.qpos[7:]),
         "feet_distance": self._cost_feet_distance(data, info),
-        # Force sensor related rewards.
-        "force_sensor_balance": self._reward_force_sensor_balance(data),
-        "force_sensor_stability": self._reward_force_sensor_stability(data),
-        "force_impulse_penalty": self._cost_force_impulse_penalty(data),
     }
 
   # Tracking rewards.
@@ -775,51 +761,6 @@ class Joystick(t1_force_base.T1ForceEnv):
         - jp.sin(base_yaw) * (left_foot_pos[0] - right_foot_pos[0])
     )
     return jp.clip(0.2 - feet_distance, min=0.0, max=0.1)
-
-  # Force sensor related rewards.
-
-  def _reward_force_sensor_balance(self, data: mjx.Data) -> jax.Array:
-    """Reward for balanced force distribution between feet."""
-    feet_forces = self.get_feet_forces(data)
-    left_force_z = feet_forces[2]  # Z component of left foot force
-    right_force_z = feet_forces[5]  # Z component of right foot force
-    
-    # Reward for balanced vertical forces
-    force_balance = jp.abs(left_force_z - right_force_z)
-    return jp.exp(-force_balance / 10.0)  # Normalize by expected force range
-
-  def _reward_force_sensor_stability(self, data: mjx.Data) -> jax.Array:
-    """Reward for stable force patterns (smooth transitions)."""
-    feet_forces = self.get_feet_forces(data)
-    
-    # Reward for having reasonable vertical forces (not too high or too low)
-    left_force_z = feet_forces[2]
-    right_force_z = feet_forces[5]
-    
-    # Target force around 200-400N per foot (robot weight ~40kg)
-    target_force = 300.0
-    force_error = jp.square(left_force_z - target_force) + jp.square(right_force_z - target_force)
-    
-    return jp.exp(-force_error / 10000.0)  # Normalize by force variance
-
-  def _cost_force_impulse_penalty(self, data: mjx.Data) -> jax.Array:
-    """Penalize force magnitudes from force sensors."""
-    feet_forces = self.get_feet_forces(data)
-    
-    # Get force magnitudes for both feet (L2 norm of 3D force vector)
-    left_force_z = feet_forces[2]  # [Fx, Fy, Fz] for left foot
-    right_force_z = feet_forces[5]  # [Fx, Fy, Fz] for right foot
-    
-    # Compute force magnitude (L2 norm)
-    # left_force_z = left_force_z
-    # right_force_z = right_force_z
-    
-    # Penalize force magnitudes with squared penalty
-    # This discourages large forces proportionally to their magnitude
-    penalty = jp.mean(jp.array([left_force_z, right_force_z]))
-    
-    # Normalize by 1e6 (1000N^2) for reasonable scaling
-    return penalty / 1e3
 
   def sample_command(self, rng: jax.Array) -> jax.Array:
     rng1, rng2, rng3, rng4 = jax.random.split(rng, 4)
