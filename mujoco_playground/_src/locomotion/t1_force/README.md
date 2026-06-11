@@ -34,6 +34,29 @@ python learning/train_jax_ppo.py \
 
 Checkpoints and logs are saved to `learning/logs/`.
 
+## Soft landing experiment
+
+To compare the effect of the `soft_landing` reward, run these two commands (on
+separate GPUs if available):
+
+```bash
+# Baseline — no soft landing penalty
+CUDA_VISIBLE_DEVICES=0 python learning/train_jax_ppo.py \
+  --env_name=T1ForceJoystickFlatTerrain \
+  --use_wandb \
+  --suffix=baseline
+
+# With soft landing penalty
+CUDA_VISIBLE_DEVICES=1 python learning/train_jax_ppo.py \
+  --env_name=T1ForceJoystickFlatTerrain \
+  --use_wandb \
+  --soft_landing_scale=-1e-5 \
+  --suffix=soft_landing
+```
+
+`CUDA_VISIBLE_DEVICES` pins each run to a specific GPU. The `--suffix` flag
+keeps the W&B runs and checkpoint directories distinct.
+
 ## Evaluation
 
 To visualize a trained policy without further training:
@@ -48,12 +71,9 @@ python learning/train_jax_ppo.py \
 ## What the sensors add
 
 Each foot has a 3-axis force sensor (`left_foot_force`, `right_foot_force`).
-The environment adds three force-related reward terms on top of the standard T1
-locomotion reward:
+The sensor readings are included in both the policy observation (`state`) and
+the privileged critic observation (`privileged_state`).
 
-- **`force_sensor_balance`** — penalizes asymmetric loading between feet
-- **`force_sensor_stability`** — penalizes rapid changes in foot force
-- **`force_impulse_penalty`** — penalizes high-impact contact forces
-
-Set `observe_force_sensors: false` in the env config to use the `ForceRewardOnly`
-variant behavior without switching environments.
+The `soft_landing` reward penalizes high contact force magnitude at the instant
+a foot first touches the ground. It is zero by default and enabled via
+`--soft_landing_scale`.

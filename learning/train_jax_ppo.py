@@ -134,6 +134,9 @@ _POLICY_OBS_KEY = flags.DEFINE_string(
     "policy_obs_key", "state", "Policy obs key"
 )
 _VALUE_OBS_KEY = flags.DEFINE_string("value_obs_key", "privileged_state", "Value obs key")
+_SOFT_LANDING_SCALE = flags.DEFINE_float(
+    "soft_landing_scale", None, "Scale for the soft_landing reward (e.g. -1e-5). If not set, uses the env default (0.0)."
+)
 _RSCOPE_ENVS = flags.DEFINE_integer(
     "rscope_envs",
     None,
@@ -206,6 +209,8 @@ def main(argv):
   # Load environment configuration
   env_cfg = registry.get_default_config(_ENV_NAME.value)
   env_cfg["impl"] = _IMPL.value
+  if _SOFT_LANDING_SCALE.present:
+    env_cfg.reward_config.scales.soft_landing = _SOFT_LANDING_SCALE.value
 
   ppo_params = get_rl_config(_ENV_NAME.value)
 
