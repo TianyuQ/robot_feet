@@ -133,7 +133,7 @@ _VALUE_HIDDEN_LAYER_SIZES = flags.DEFINE_list(
 _POLICY_OBS_KEY = flags.DEFINE_string(
     "policy_obs_key", "state", "Policy obs key"
 )
-_VALUE_OBS_KEY = flags.DEFINE_string("value_obs_key", "state", "Value obs key")
+_VALUE_OBS_KEY = flags.DEFINE_string("value_obs_key", "privileged_state", "Value obs key")
 _RSCOPE_ENVS = flags.DEFINE_integer(
     "rscope_envs",
     None,
