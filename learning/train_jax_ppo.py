@@ -386,6 +386,11 @@ def main(argv):
     # Log to Weights & Biases
     if _USE_WANDB.value and not _PLAY_ONLY.value:
       wandb.log(metrics, step=num_steps)
+      soft_landing_keys = {
+          "soft_landing/episode_reward/soft_landing": metrics.get("eval/episode_reward/soft_landing", 0),
+          "soft_landing/episode_soft_landing_impact": metrics.get("eval/episode_soft_landing_impact", 0),
+      }
+      wandb.log(soft_landing_keys, step=num_steps)
 
     # Log to TensorBoard
     if _USE_TB.value and not _PLAY_ONLY.value:
