@@ -75,7 +75,7 @@ def default_config():
       success_threshold=0.05,
       action_history_length=1,
       impl='jax',
-      nconmax=12 * 8192,
+      naconmax=12 * 8192,
       njmax=128,
   )
   return config
@@ -209,7 +209,7 @@ class PandaPickCubeCartesian(pick.PandaPickCube):
         qvel=jp.zeros(self._mjx_model.nv, dtype=float),
         ctrl=self._init_ctrl,
         impl=self._mjx_model.impl.value,
-        nconmax=self._config.nconmax,
+        naconmax=self._config.naconmax,
         njmax=self._config.njmax,
     )
 
