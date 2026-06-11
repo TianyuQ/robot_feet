@@ -103,13 +103,6 @@ def default_config() -> config_dict.ConfigDict:
   )
 
 
-def force_reward_only_config() -> config_dict.ConfigDict:
-  """Config where force sensors affect rewards but not observations."""
-  cfg = default_config()
-  cfg.observe_force_sensors = False
-  return cfg
-
-
 class Joystick(t1_force_base.T1ForceEnv):
   """Track a joystick command with force sensors."""
 

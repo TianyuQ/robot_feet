@@ -88,9 +88,6 @@ _envs = {
     "T1ForceJoystickFlatTerrain": functools.partial(
         t1_force_joystick.Joystick, task="flat_terrain"
     ),
-    "T1ForceJoystickFlatTerrainForceRewardOnly": functools.partial(
-        t1_force_joystick.Joystick, task="flat_terrain"
-    ),
     "T1ForceJoystickRoughTerrain": functools.partial(
         t1_force_joystick.Joystick, task="rough_terrain"
     ),
@@ -121,9 +118,6 @@ _cfgs = {
     "T1JoystickFlatTerrain": physio_joystick.default_config,
     "T1JoystickRoughTerrain": physio_joystick.default_config,
     "T1ForceJoystickFlatTerrain": t1_force_joystick.default_config,
-    "T1ForceJoystickFlatTerrainForceRewardOnly": (
-        t1_force_joystick.force_reward_only_config
-    ),
     "T1ForceJoystickRoughTerrain": t1_force_joystick.default_config,
 }
 
@@ -144,7 +138,6 @@ _randomizer = {
     "T1JoystickFlatTerrain": t1_randomize.domain_randomize,
     "T1JoystickRoughTerrain": t1_randomize.domain_randomize,
     "T1ForceJoystickFlatTerrain": t1_randomize.domain_randomize,
-    "T1ForceJoystickFlatTerrainForceRewardOnly": t1_randomize.domain_randomize,
     "T1ForceJoystickRoughTerrain": t1_randomize.domain_randomize,
 }
 
