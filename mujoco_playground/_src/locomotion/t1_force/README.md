@@ -1,5 +1,26 @@
 # T1 Force — Soft Landing Experiment
 
+## Setup
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+git clone <repo>
+cd robot_feet
+uv sync --extra learning
+```
+
+For GPU clusters with non-standard CUDA:
+```bash
+uv pip install "jax[cuda12]"
+```
+
+Log in to W&B before training:
+```bash
+uv run wandb login
+```
+
+## Experiment
+
 Run from the repo root. Baseline and soft landing on separate GPUs:
 
 ```bash
