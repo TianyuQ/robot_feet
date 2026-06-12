@@ -137,6 +137,9 @@ _VALUE_OBS_KEY = flags.DEFINE_string("value_obs_key", "privileged_state", "Value
 _SOFT_LANDING_SCALE = flags.DEFINE_float(
     "soft_landing_scale", None, "Scale for the soft_landing reward (e.g. -1e-5). If not set, uses the env default (0.0)."
 )
+_OBSERVE_FORCE_SENSORS = flags.DEFINE_boolean(
+    "observe_force_sensors", None, "Whether to include force sensor readings in observations. If not set, uses the env default."
+)
 _RSCOPE_ENVS = flags.DEFINE_integer(
     "rscope_envs",
     None,
@@ -211,6 +214,8 @@ def main(argv):
   env_cfg["impl"] = _IMPL.value
   if _SOFT_LANDING_SCALE.present:
     env_cfg.reward_config.scales.soft_landing = _SOFT_LANDING_SCALE.value
+  if _OBSERVE_FORCE_SENSORS.present:
+    env_cfg.observe_force_sensors = _OBSERVE_FORCE_SENSORS.value
 
   ppo_params = get_rl_config(_ENV_NAME.value)
 
