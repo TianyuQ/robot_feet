@@ -462,6 +462,9 @@ def main(argv):
     print(f"Time to JIT compile: {times[1] - times[0]}")
     print(f"Time to train: {times[-1] - times[1]}")
 
+  if _NUM_VIDEOS.value == 0:
+    return
+
   print("Starting inference...")
 
   # Create inference function.

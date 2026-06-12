@@ -29,7 +29,7 @@ Three runs on separate GPUs. The only differences are the soft landing reward sc
 CUDA_VISIBLE_DEVICES=0 uv run python learning/train_jax_ppo.py \
   --env_name=T1ForceJoystickFlatTerrain \
   --use_wandb \
-  --run_render=False \
+  --num_videos=0 \
   --observe_force_sensors=False \
   --suffix=baseline
 
@@ -37,7 +37,7 @@ CUDA_VISIBLE_DEVICES=0 uv run python learning/train_jax_ppo.py \
 CUDA_VISIBLE_DEVICES=1 uv run python learning/train_jax_ppo.py \
   --env_name=T1ForceJoystickFlatTerrain \
   --use_wandb \
-  --run_render=False \
+  --num_videos=0 \
   --soft_landing_scale=-1e-5 \
   --observe_force_sensors=False \
   --suffix=force_reward_only
@@ -46,7 +46,7 @@ CUDA_VISIBLE_DEVICES=1 uv run python learning/train_jax_ppo.py \
 CUDA_VISIBLE_DEVICES=2 uv run python learning/train_jax_ppo.py \
   --env_name=T1ForceJoystickFlatTerrain \
   --use_wandb \
-  --run_render=False \
+  --num_videos=0 \
   --soft_landing_scale=-1e-5 \
   --observe_force_sensors=True \
   --suffix=force_reward_and_obs
