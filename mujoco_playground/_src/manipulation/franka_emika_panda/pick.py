@@ -48,7 +48,7 @@ def default_config() -> config_dict.ConfigDict:
           )
       ),
       impl='jax',
-      nconmax=24 * 8192,
+      naconmax=24 * 8192,
       njmax=128,
   )
   return config
@@ -130,7 +130,7 @@ class PandaPickCube(panda.PandaBase):
         qvel=jp.zeros(self._mjx_model.nv, dtype=float),
         ctrl=self._init_ctrl,
         impl=self._mjx_model.impl.value,
-        nconmax=self._config.nconmax,
+        naconmax=self._config.naconmax,
         njmax=self._config.njmax,
     )
 

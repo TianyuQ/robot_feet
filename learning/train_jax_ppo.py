@@ -133,7 +133,13 @@ _VALUE_HIDDEN_LAYER_SIZES = flags.DEFINE_list(
 _POLICY_OBS_KEY = flags.DEFINE_string(
     "policy_obs_key", "state", "Policy obs key"
 )
-_VALUE_OBS_KEY = flags.DEFINE_string("value_obs_key", "state", "Value obs key")
+_VALUE_OBS_KEY = flags.DEFINE_string("value_obs_key", "privileged_state", "Value obs key")
+_SOFT_LANDING_SCALE = flags.DEFINE_float(
+    "soft_landing_scale", None, "Scale for the soft_landing reward (e.g. -1e-5). If not set, uses the env default (0.0)."
+)
+_OBSERVE_FORCE_SENSORS = flags.DEFINE_boolean(
+    "observe_force_sensors", None, "Whether to include force sensor readings in observations. If not set, uses the env default."
+)
 _RSCOPE_ENVS = flags.DEFINE_integer(
     "rscope_envs",
     None,
@@ -206,6 +212,10 @@ def main(argv):
   # Load environment configuration
   env_cfg = registry.get_default_config(_ENV_NAME.value)
   env_cfg["impl"] = _IMPL.value
+  if _SOFT_LANDING_SCALE.present:
+    env_cfg.reward_config.scales.soft_landing = _SOFT_LANDING_SCALE.value
+  if _OBSERVE_FORCE_SENSORS.present:
+    env_cfg.observe_force_sensors = _OBSERVE_FORCE_SENSORS.value
 
   ppo_params = get_rl_config(_ENV_NAME.value)
 
@@ -286,7 +296,7 @@ def main(argv):
 
   # Initialize Weights & Biases if required
   if _USE_WANDB.value and not _PLAY_ONLY.value:
-    wandb.init(project="mjxrl", name=exp_name)
+    wandb.init(project="mjxrl", name=_SUFFIX.value if _SUFFIX.value else exp_name)
     wandb.config.update(env_cfg.to_dict())
     wandb.config.update({"env_name": _ENV_NAME.value})
 
@@ -381,6 +391,11 @@ def main(argv):
     # Log to Weights & Biases
     if _USE_WANDB.value and not _PLAY_ONLY.value:
       wandb.log(metrics, step=num_steps)
+      soft_landing_keys = {
+          "soft_landing/episode_reward/soft_landing": metrics.get("eval/episode_reward/soft_landing", 0),
+          "soft_landing/episode_soft_landing_impact": metrics.get("eval/episode_soft_landing_impact", 0),
+      }
+      wandb.log(soft_landing_keys, step=num_steps)
 
     # Log to TensorBoard
     if _USE_TB.value and not _PLAY_ONLY.value:
@@ -446,6 +461,9 @@ def main(argv):
   if len(times) > 1:
     print(f"Time to JIT compile: {times[1] - times[0]}")
     print(f"Time to train: {times[-1] - times[1]}")
+
+  if _NUM_VIDEOS.value == 0:
+    return
 
   print("Starting inference...")
 
